@@ -1,0 +1,7 @@
+{
+  "name": "MindFlow - Verbal Fluency Master",
+  "description": "Un'app modulare per il potenziamento cognitivo e l'apprendimento, focalizzata sulla fluenza verbale, l'accesso lessicale e l'elasticità mentale tramite l'IA di Gemini.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
