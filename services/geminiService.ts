@@ -2,27 +2,29 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { ExerciseType } from "../types";
 
-// Inizializziamo l'IA solo quando serve una chiamata
-const getAI = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error("Chiave API non configurata.");
-  }
-  return new GoogleGenAI({ apiKey });
-};
+/**
+ * REQUISITO CRITICO: Istanziamento ESCLUSIVO all'interno delle funzioni.
+ * Non chiamare mai new GoogleGenAI a livello di modulo.
+ */
 
 export const getTheoryExplanation = async (theory: string): Promise<string> => {
-  const ai = getAI();
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API_KEY_MISSING");
+  
+  const ai = new GoogleGenAI({ apiKey });
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Spiega questo metodo: ${theory}`,
-    config: { systemInstruction: "Sei un coach di mnemotecniche." }
+    contents: `Spiega questo metodo di apprendimento in modo professionale: ${theory}`,
+    config: { systemInstruction: "Sei un coach esperto in neuroscienze." }
   });
   return response.text || "";
 };
 
 export const getSpeechData = async (text: string): Promise<string | undefined> => {
-  const ai = getAI();
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API_KEY_MISSING");
+
+  const ai = new GoogleGenAI({ apiKey });
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash-preview-tts",
     contents: [{ parts: [{ text }] }],
@@ -35,7 +37,10 @@ export const getSpeechData = async (text: string): Promise<string | undefined> =
 };
 
 export const getTutorResponse = async (type: ExerciseType, phase: string, userTranscript: string, history: string[]) => {
-  const ai = getAI();
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API_KEY_MISSING");
+
+  const ai = new GoogleGenAI({ apiKey });
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: `Esercizio: ${type}, Fase: ${phase}, Input: ${userTranscript}, Storia: ${history.join('|')}`,
@@ -56,17 +61,14 @@ export const getTutorResponse = async (type: ExerciseType, phase: string, userTr
   return JSON.parse(response.text || "{}");
 };
 
-// Fix: Added the constraints parameter to match the call signature in ActiveExercise.tsx
 export const evaluateExercise = async (type: ExerciseType, setupPrompt: string, transcript: string, constraints?: string) => {
-  const ai = getAI();
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API_KEY_MISSING");
+
+  const ai = new GoogleGenAI({ apiKey });
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Valuta l'esercizio di tipo ${type}. 
-Prompt originale: ${setupPrompt}
-${constraints ? `Vincoli da rispettare: ${constraints}` : ''}
-Trascrizione utente: ${transcript}
-
-Fornisci un punteggio da 0 a 100 e un feedback costruttivo sulla performance cognitiva dell'utente.`,
+    contents: `Valuta ${type}. Prompt: ${setupPrompt}. ${constraints ? `Vincoli: ${constraints}.` : ''} Input: ${transcript}`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -85,10 +87,13 @@ Fornisci un punteggio da 0 a 100 e un feedback costruttivo sulla performance cog
 };
 
 export const getExerciseSetup = async (type: ExerciseType) => {
-  const ai = getAI();
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API_KEY_MISSING");
+
+  const ai = new GoogleGenAI({ apiKey });
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Genera setup per l'esercizio ${type}`,
+    contents: `Genera un setup per ${type}`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
