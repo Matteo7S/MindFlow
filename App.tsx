@@ -34,11 +34,23 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const checkKey = async () => {
-      // Verifica se siamo in un ambiente che supporta aistudio o se la chiave è già in process.env
-      const isSelected = (window as any).aistudio ? await (window as any).aistudio.hasSelectedApiKey() : false;
-      const keyAvailable = isSelected || (!!process.env.API_KEY && process.env.API_KEY !== "");
-      setHasApiKey(keyAvailable);
+      // Priorità 1: Variabile d'ambiente (Vercel)
+      const envKey = process.env.API_KEY;
+      if (envKey && envKey.trim() !== "") {
+        setHasApiKey(true);
+        return;
+      }
+
+      // Priorità 2: Sandbox AI Studio
+      const aiStudio = (window as any).aistudio;
+      if (aiStudio && typeof aiStudio.hasSelectedApiKey === 'function') {
+        const isSelected = await aiStudio.hasSelectedApiKey();
+        setHasApiKey(isSelected);
+      } else {
+        setHasApiKey(false);
+      }
     };
+    
     checkKey();
     setDailyGoal(DAILY_GOALS[Math.floor(Math.random() * DAILY_GOALS.length)]);
 
@@ -49,10 +61,12 @@ const App: React.FC = () => {
   }, []);
 
   const handleSelectKey = async () => {
-    if ((window as any).aistudio) {
-      await (window as any).aistudio.openSelectKey();
-      // Dopo l'apertura forziamo lo stato a true come da linee guida per mitigare race conditions
+    const aiStudio = (window as any).aistudio;
+    if (aiStudio && typeof aiStudio.openSelectKey === 'function') {
+      await aiStudio.openSelectKey();
       setHasApiKey(true);
+    } else {
+      alert("⚠️ Attenzione: Non sei nell'anteprima di AI Studio.\n\nPer usare MindFlow su Vercel:\n1. Vai su Vercel Dashboard\n2. Settings -> Environment Variables\n3. Aggiungi API_KEY con la tua chiave Gemini.");
     }
   };
 
@@ -76,31 +90,31 @@ const App: React.FC = () => {
       xpEarned,
       details: evaluation.feedback || ""
     };
-    const updatedResults = [newResult, ...results].slice(0, 20);
-    setResults(updatedResults);
-    localStorage.setItem('mindflow_results', JSON.stringify(updatedResults));
+    setResults(prev => [newResult, ...prev].slice(0, 20));
   };
 
   if (hasApiKey === false) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-center text-white">
-        <div className="max-w-md bg-white/10 p-10 rounded-[3rem] backdrop-blur-xl border border-white/10 shadow-2xl">
-          <div className="text-6xl mb-6">🧠</div>
-          <h1 className="text-3xl font-black mb-4 tracking-tight">MindFlow Academy</h1>
-          <p className="opacity-70 mb-8 leading-relaxed">Configura la tua API Key Gemini per iniziare.</p>
-          <button onClick={handleSelectKey} className="w-full bg-indigo-600 py-4 rounded-2xl font-black text-lg hover:bg-indigo-500 transition-all">
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-center text-white font-sans">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 p-12 rounded-[3.5rem] shadow-2xl">
+          <div className="text-7xl mb-8 animate-bounce">🧠</div>
+          <h1 className="text-3xl font-black mb-4 tracking-tighter">MindFlow Academy</h1>
+          <p className="text-slate-400 mb-10 leading-relaxed font-medium">L'intelligenza artificiale di Gemini non è ancora configurata.</p>
+          <button 
+            onClick={handleSelectKey} 
+            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-5 rounded-2xl font-black text-lg transition-all active:scale-95 shadow-xl shadow-indigo-600/20"
+          >
             Configura Chiave API
           </button>
-          <p className="mt-4 text-[10px] opacity-40 uppercase tracking-widest">
-            Richiede un progetto GCP con fatturazione attiva (piano gratuito disponibile)
-          </p>
+          <div className="mt-8 pt-8 border-t border-slate-800">
+            <p className="text-[10px] text-slate-500 uppercase tracking-[0.2em] font-bold">Ambiente: {process.env.NODE_ENV === 'production' ? 'Production' : 'Development'}</p>
+          </div>
         </div>
       </div>
     );
   }
 
-  // Se hasApiKey è null, stiamo ancora caricando il controllo
-  if (hasApiKey === null) return <div className="min-h-screen bg-slate-900"></div>;
+  if (hasApiKey === null) return <div className="min-h-screen bg-slate-950"></div>;
 
   const currentLevelXP = stats.xp % XP_PER_LEVEL;
   const progressPercent = (currentLevelXP / XP_PER_LEVEL) * 100;
@@ -113,62 +127,63 @@ const App: React.FC = () => {
       onBack={() => setSelectedExercise(null)}
     >
       {!selectedExercise ? (
-        <div className="space-y-12 pb-20">
+        <div className="space-y-12 pb-20 max-w-7xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 bg-gradient-to-br from-indigo-800 to-slate-900 rounded-[3rem] p-10 text-white shadow-2xl relative overflow-hidden group">
+            <div className="lg:col-span-2 bg-gradient-to-br from-indigo-700 via-indigo-800 to-slate-950 rounded-[3rem] p-10 text-white shadow-2xl relative overflow-hidden">
               <div className="relative z-10">
-                <div className="flex items-center gap-3 mb-6">
-                  <span className="bg-yellow-400 text-indigo-900 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest">Level {stats.level}</span>
-                  <span className="text-indigo-200 text-xs font-bold">{stats.sessionsCount} Sessioni Totali</span>
+                <div className="flex items-center gap-3 mb-8">
+                  <span className="bg-yellow-400 text-indigo-950 text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest">Lv. {stats.level}</span>
+                  <span className="text-indigo-200 text-xs font-bold">{stats.sessionsCount} Sessioni</span>
                 </div>
-                <h2 className="text-4xl font-black mb-4">La tua mente è un muscolo.</h2>
+                <h2 className="text-4xl md:text-5xl font-black mb-6 tracking-tight">Potenzia la tua mente.</h2>
                 <div className="max-w-sm">
-                  <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-indigo-300 mb-2">
-                    <span>Progresso Livello</span>
+                  <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-indigo-300 mb-3">
+                    <span>Prossimo Livello</span>
                     <span>{currentLevelXP} / {XP_PER_LEVEL} XP</span>
                   </div>
-                  <div className="h-3 bg-white/10 rounded-full overflow-hidden p-0.5 border border-white/5">
-                    <div className="h-full bg-yellow-400 rounded-full shadow-[0_0_15px_rgba(250,204,21,0.6)] transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
+                  <div className="h-4 bg-black/30 rounded-full overflow-hidden p-1 border border-white/10">
+                    <div className="h-full bg-gradient-to-r from-yellow-300 to-yellow-500 rounded-full transition-all duration-1000 shadow-[0_0_15px_rgba(250,204,21,0.5)]" style={{ width: `${progressPercent}%` }}></div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-[3rem] p-8 shadow-sm flex flex-col justify-center space-y-6">
-              <div>
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Obiettivo del Giorno</h3>
-                <p className="text-slate-800 font-bold text-lg leading-tight">"{dailyGoal}"</p>
+            <div className="bg-white border border-slate-100 rounded-[3.5rem] p-10 shadow-sm flex flex-col justify-center text-center">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6">Missione Odierna</h3>
+              <p className="text-slate-800 font-extrabold text-xl leading-snug">"{dailyGoal}"</p>
+              <div className="mt-8 flex justify-center">
+                <div className="w-12 h-1 bg-indigo-100 rounded-full"></div>
               </div>
             </div>
           </div>
 
           <div className="flex flex-wrap gap-4 items-center">
-             <button onClick={() => setActiveModule('FLUENCY')} className={`px-8 py-3 rounded-2xl font-black text-sm transition-all ${activeModule === 'FLUENCY' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-200/50 text-slate-500'}`}>Fluenza Verbale</button>
-             <button onClick={() => setActiveModule('MNEMONICS')} className={`px-8 py-3 rounded-2xl font-black text-sm transition-all ${activeModule === 'MNEMONICS' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-200/50 text-slate-500'}`}>Mnemotecniche</button>
+             <button onClick={() => setActiveModule('FLUENCY')} className={`px-10 py-4 rounded-2xl font-black text-sm transition-all ${activeModule === 'FLUENCY' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100' : 'bg-slate-200/50 text-slate-500 hover:bg-slate-200'}`}>Fluenza Verbale</button>
+             <button onClick={() => setActiveModule('MNEMONICS')} className={`px-10 py-4 rounded-2xl font-black text-sm transition-all ${activeModule === 'MNEMONICS' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100' : 'bg-slate-200/50 text-slate-500 hover:bg-slate-200'}`}>Mnemotecniche</button>
           </div>
 
-          <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {(activeModule === 'FLUENCY' ? FLUENCY_EXERCISES : MNEMONIC_EXERCISES).map(ex => (
-                <ExerciseCard key={ex.id} exercise={ex} onClick={setSelectedExercise} />
-              ))}
-            </div>
+          <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+            {(activeModule === 'FLUENCY' ? FLUENCY_EXERCISES : MNEMONIC_EXERCISES).map(ex => (
+              <ExerciseCard key={ex.id} exercise={ex} onClick={setSelectedExercise} />
+            ))}
           </section>
 
           {results.length > 0 && (
-            <div className="pt-10">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Attività Recente</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="pt-16 border-t border-slate-100">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-8">Cronologia Recente</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {results.slice(0, 3).map(res => (
-                  <div key={res.id} className="bg-white p-5 rounded-3xl border border-slate-100 flex items-center justify-between">
+                  <div key={res.id} className="bg-white p-6 rounded-[2rem] border border-slate-50 flex items-center justify-between shadow-sm">
                     <div className="flex items-center gap-4">
-                      <div className="text-2xl">{ALL_EXERCISES.find(e => e.id === res.type)?.icon}</div>
+                      <div className="text-3xl">{ALL_EXERCISES.find(e => e.id === res.type)?.icon}</div>
                       <div>
-                        <span className="block font-bold text-slate-800 text-sm">{ALL_EXERCISES.find(e => e.id === res.type)?.title}</span>
-                        <span className="text-[10px] font-black text-slate-300 uppercase">{new Date(res.date).toLocaleDateString()}</span>
+                        <span className="block font-bold text-slate-800 text-sm truncate max-w-[120px]">{ALL_EXERCISES.find(e => e.id === res.type)?.title}</span>
+                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-tighter">{new Date(res.date).toLocaleDateString()}</span>
                       </div>
                     </div>
-                    <div className="text-right font-black text-indigo-600">{res.score}%</div>
+                    <div className="text-right">
+                      <div className="font-black text-indigo-600 text-xl">{res.score}%</div>
+                    </div>
                   </div>
                 ))}
               </div>
