@@ -4,10 +4,13 @@ import { ExerciseType } from "../types";
 
 /**
  * REQUISITO: GoogleGenAI deve essere istanziato solo quando necessario.
+ * Gestione sicura di process.env per ambienti browser senza build step.
  */
 const getAIClient = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey || apiKey.trim() === "") {
+  // @ts-ignore - Protezione per ambienti dove process non è definito
+  const apiKey = typeof process !== 'undefined' ? process.env.API_KEY : (window as any).GEMINI_API_KEY;
+  
+  if (!apiKey || apiKey.trim() === "" || apiKey === "undefined") {
     throw new Error("API_KEY_NOT_FOUND");
   }
   return new GoogleGenAI({ apiKey });

@@ -16,13 +16,6 @@ const INITIAL_STATS: UserStats = {
 };
 
 const XP_PER_LEVEL = 1000;
-const DAILY_GOALS = [
-  "Completa 3 sessioni di Fluenza Semantica",
-  "Raggiungi l'80% nel Ping-Pong Mentale",
-  "Impara 5 nuovi suoni della conversione fonetica",
-  "Descrivi una stanza usando il Palazzo della Memoria",
-  "Esegui 2 minuti di Shadowing senza interruzioni"
-];
 
 const App: React.FC = () => {
   const [activeModule, setActiveModule] = useState<ModuleType>('FLUENCY');
@@ -30,29 +23,42 @@ const App: React.FC = () => {
   const [results, setResults] = useState<ExerciseResult[]>([]);
   const [stats, setStats] = useState<UserStats>(INITIAL_STATS);
   const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
-  const [dailyGoal, setDailyGoal] = useState("");
 
   useEffect(() => {
     const checkKey = async () => {
-      // Priorità 1: Variabile d'ambiente (Vercel)
-      const envKey = process.env.API_KEY;
-      if (envKey && envKey.trim() !== "") {
-        setHasApiKey(true);
-        return;
-      }
+      try {
+        // 1. Verifica Sandbox AI Studio (Metodo preferito per anteprime)
+        const aiStudio = (window as any).aistudio;
+        if (aiStudio && typeof aiStudio.hasSelectedApiKey === 'function') {
+          const isSelected = await aiStudio.hasSelectedApiKey();
+          if (isSelected) {
+            setHasApiKey(true);
+            return;
+          }
+        }
 
-      // Priorità 2: Sandbox AI Studio
-      const aiStudio = (window as any).aistudio;
-      if (aiStudio && typeof aiStudio.hasSelectedApiKey === 'function') {
-        const isSelected = await aiStudio.hasSelectedApiKey();
-        setHasApiKey(isSelected);
-      } else {
+        // 2. Verifica process.env (Vercel Build-time o Proxy injection)
+        // @ts-ignore
+        const envKey = typeof process !== 'undefined' ? process.env.API_KEY : null;
+        if (envKey && envKey !== "undefined" && envKey !== "") {
+          setHasApiKey(true);
+          return;
+        }
+
+        // 3. Verifica se abbiamo una chiave salvata in questa sessione (fallback)
+        if ((window as any).GEMINI_API_KEY) {
+          setHasApiKey(true);
+          return;
+        }
+
+        setHasApiKey(false);
+      } catch (e) {
+        console.warn("Key check failed, defaulting to false", e);
         setHasApiKey(false);
       }
     };
     
     checkKey();
-    setDailyGoal(DAILY_GOALS[Math.floor(Math.random() * DAILY_GOALS.length)]);
 
     const savedStats = localStorage.getItem('mindflow_stats');
     if (savedStats) setStats(JSON.parse(savedStats));
@@ -66,49 +72,33 @@ const App: React.FC = () => {
       await aiStudio.openSelectKey();
       setHasApiKey(true);
     } else {
-      alert("⚠️ Attenzione: Non sei nell'anteprima di AI Studio.\n\nPer usare MindFlow su Vercel:\n1. Vai su Vercel Dashboard\n2. Settings -> Environment Variables\n3. Aggiungi API_KEY con la tua chiave Gemini.");
+      // Se siamo su Vercel fuori da AI Studio, chiediamo all'utente di inserirla manualmente per questa sessione
+      const manualKey = prompt("⚠️ API_KEY non rilevata automaticamente dal browser.\n\nPer usare l'app fuori da AI Studio, incolla qui la tua chiave Gemini (verrà usata solo per questa sessione):");
+      if (manualKey) {
+        (window as any).GEMINI_API_KEY = manualKey;
+        setHasApiKey(true);
+      }
     }
-  };
-
-  const handleFinish = (evaluation: any) => {
-    const xpEarned = Math.round((evaluation.score || 70) * 5.5);
-    const newStats = {
-      ...stats,
-      xp: stats.xp + xpEarned,
-      level: Math.floor((stats.xp + xpEarned) / XP_PER_LEVEL) + 1,
-      sessionsCount: stats.sessionsCount + 1,
-      bestScore: Math.max(stats.bestScore, evaluation.score || 0)
-    };
-    setStats(newStats);
-    localStorage.setItem('mindflow_stats', JSON.stringify(newStats));
-    
-    const newResult: ExerciseResult = {
-      id: Date.now().toString(),
-      type: selectedExercise!.id,
-      date: new Date(),
-      score: evaluation.score || 0,
-      xpEarned,
-      details: evaluation.feedback || ""
-    };
-    setResults(prev => [newResult, ...prev].slice(0, 20));
   };
 
   if (hasApiKey === false) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-center text-white font-sans">
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-center text-white">
         <div className="max-w-md w-full bg-slate-900 border border-slate-800 p-12 rounded-[3.5rem] shadow-2xl">
-          <div className="text-7xl mb-8 animate-bounce">🧠</div>
+          <div className="text-7xl mb-8 animate-pulse">🧠</div>
           <h1 className="text-3xl font-black mb-4 tracking-tighter">MindFlow Academy</h1>
-          <p className="text-slate-400 mb-10 leading-relaxed font-medium">L'intelligenza artificiale di Gemini non è ancora configurata.</p>
+          <p className="text-slate-400 mb-10 leading-relaxed">
+            Non abbiamo rilevato una chiave API attiva nel tuo browser.
+          </p>
           <button 
             onClick={handleSelectKey} 
-            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-5 rounded-2xl font-black text-lg transition-all active:scale-95 shadow-xl shadow-indigo-600/20"
+            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-5 rounded-2xl font-black text-lg transition-all shadow-xl"
           >
             Configura Chiave API
           </button>
-          <div className="mt-8 pt-8 border-t border-slate-800">
-            <p className="text-[10px] text-slate-500 uppercase tracking-[0.2em] font-bold">Ambiente: {process.env.NODE_ENV === 'production' ? 'Production' : 'Development'}</p>
-          </div>
+          <p className="mt-6 text-[9px] text-slate-500 uppercase tracking-widest leading-loose">
+            Se sei su Vercel, assicurati di usare l'anteprima di AI Studio o di inserire la chiave manualmente cliccando il tasto sopra.
+          </p>
         </div>
       </div>
     );
@@ -133,68 +123,44 @@ const App: React.FC = () => {
               <div className="relative z-10">
                 <div className="flex items-center gap-3 mb-8">
                   <span className="bg-yellow-400 text-indigo-950 text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest">Lv. {stats.level}</span>
-                  <span className="text-indigo-200 text-xs font-bold">{stats.sessionsCount} Sessioni</span>
                 </div>
-                <h2 className="text-4xl md:text-5xl font-black mb-6 tracking-tight">Potenzia la tua mente.</h2>
+                <h2 className="text-4xl md:text-5xl font-black mb-6 tracking-tight">Benvenuto, Trainer.</h2>
                 <div className="max-w-sm">
                   <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-indigo-300 mb-3">
-                    <span>Prossimo Livello</span>
-                    <span>{currentLevelXP} / {XP_PER_LEVEL} XP</span>
+                    <span>Progresso XP</span>
+                    <span>{currentLevelXP} / {XP_PER_LEVEL}</span>
                   </div>
-                  <div className="h-4 bg-black/30 rounded-full overflow-hidden p-1 border border-white/10">
-                    <div className="h-full bg-gradient-to-r from-yellow-300 to-yellow-500 rounded-full transition-all duration-1000 shadow-[0_0_15px_rgba(250,204,21,0.5)]" style={{ width: `${progressPercent}%` }}></div>
+                  <div className="h-3 bg-black/30 rounded-full overflow-hidden p-0.5">
+                    <div className="h-full bg-yellow-400 rounded-full transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
                   </div>
                 </div>
               </div>
             </div>
-
             <div className="bg-white border border-slate-100 rounded-[3.5rem] p-10 shadow-sm flex flex-col justify-center text-center">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6">Missione Odierna</h3>
-              <p className="text-slate-800 font-extrabold text-xl leading-snug">"{dailyGoal}"</p>
-              <div className="mt-8 flex justify-center">
-                <div className="w-12 h-1 bg-indigo-100 rounded-full"></div>
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-4">Stato Sistema</h3>
+              <div className="flex items-center justify-center gap-2 text-green-500 font-bold">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-ping"></div>
+                IA ONLINE
               </div>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-4 items-center">
-             <button onClick={() => setActiveModule('FLUENCY')} className={`px-10 py-4 rounded-2xl font-black text-sm transition-all ${activeModule === 'FLUENCY' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100' : 'bg-slate-200/50 text-slate-500 hover:bg-slate-200'}`}>Fluenza Verbale</button>
-             <button onClick={() => setActiveModule('MNEMONICS')} className={`px-10 py-4 rounded-2xl font-black text-sm transition-all ${activeModule === 'MNEMONICS' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100' : 'bg-slate-200/50 text-slate-500 hover:bg-slate-200'}`}>Mnemotecniche</button>
+          <div className="flex gap-4">
+             <button onClick={() => setActiveModule('FLUENCY')} className={`px-10 py-4 rounded-2xl font-black text-sm transition-all ${activeModule === 'FLUENCY' ? 'bg-indigo-600 text-white shadow-xl' : 'bg-slate-200/50 text-slate-500'}`}>Fluenza</button>
+             <button onClick={() => setActiveModule('MNEMONICS')} className={`px-10 py-4 rounded-2xl font-black text-sm transition-all ${activeModule === 'MNEMONICS' ? 'bg-indigo-600 text-white shadow-xl' : 'bg-slate-200/50 text-slate-500'}`}>Memoria</button>
           </div>
 
-          <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+          <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {(activeModule === 'FLUENCY' ? FLUENCY_EXERCISES : MNEMONIC_EXERCISES).map(ex => (
               <ExerciseCard key={ex.id} exercise={ex} onClick={setSelectedExercise} />
             ))}
           </section>
-
-          {results.length > 0 && (
-            <div className="pt-16 border-t border-slate-100">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-8">Cronologia Recente</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {results.slice(0, 3).map(res => (
-                  <div key={res.id} className="bg-white p-6 rounded-[2rem] border border-slate-50 flex items-center justify-between shadow-sm">
-                    <div className="flex items-center gap-4">
-                      <div className="text-3xl">{ALL_EXERCISES.find(e => e.id === res.type)?.icon}</div>
-                      <div>
-                        <span className="block font-bold text-slate-800 text-sm truncate max-w-[120px]">{ALL_EXERCISES.find(e => e.id === res.type)?.title}</span>
-                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-tighter">{new Date(res.date).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-black text-indigo-600 text-xl">{res.score}%</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       ) : (
         selectedExercise.id.toString().startsWith('MNEMONIC') ? (
-          <MnemonicSession exercise={selectedExercise} onFinished={handleFinish} onClose={() => setSelectedExercise(null)} />
+          <MnemonicSession exercise={selectedExercise} onFinished={(res) => { setSelectedExercise(null); }} onClose={() => setSelectedExercise(null)} />
         ) : (
-          <ActiveExercise exercise={selectedExercise} onFinished={handleFinish} onClose={() => setSelectedExercise(null)} />
+          <ActiveExercise exercise={selectedExercise} onFinished={(res) => { setSelectedExercise(null); }} onClose={() => setSelectedExercise(null)} />
         )
       )}
     </Layout>
